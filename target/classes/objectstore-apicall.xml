@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="f19ab772-f8a1-4bc4-be85-4a74a58e34ce" >
+		<http:listener-connection host="localhost" port="8081" />
+	</http:listener-config>
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="b0fd1fdd-13d5-4b0f-a9b3-26af7ab74389" entryTtl="60" expirationInterval="60" expirationIntervalUnit="SECONDS"/>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="2acb489e-539f-4b8f-91f4-aff560aaa570" >
+		<http:request-connection host="localhost" port="8082" />
+	</http:request-config>
+	<flow name="objectstore-apicallFlow" doc:id="1b10f29d-698a-4558-881d-0c18723cc97b" >
+		<http:listener doc:name="Listener" doc:id="1345a15c-8e4e-42ee-a9a6-27bf45942b8d" config-ref="HTTP_Listener_config" path="/api-call"/>
+		<logger level="INFO" doc:name="api_call_flow_started" doc:id="928e8622-5ae2-4cfb-88f6-211b08086010" message="flow started"/>
+		<os:contains doc:name="Contains" doc:id="bb614650-fa19-4566-8c96-5a8199cce743" key="token" objectStore="Object_store"/>
+		<choice doc:name="Choice" doc:id="99e2f6d9-adfc-427b-b098-4f41d19130eb" >
+			<when expression="payload==true">
+				<os:retrieve doc:name="Retrieve the token info " doc:id="bcec26a4-a461-4f50-a655-387cba868b9c" key="token" objectStore="Object_store"/>
+				<choice doc:name="Choice" doc:id="923193cf-6a47-4d0f-9174-da215d0db0fb" >
+					<when expression="#[((now() - payload.created_at) as Number) &lt; payload.expiry_intervals]">
+						<ee:transform doc:name="Transform Message" doc:id="0e7b57c3-4a05-4bd3-af27-cc0ea479fccc" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+ {
+  "token": payload.token
+  }]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+					</when>
+					<otherwise >
+						<http:request method="GET" doc:name="Request" doc:id="7ccbf8e1-206a-4236-9567-5df7a4d78014" config-ref="HTTP_Request_configuration" path="/externalapi"/>
+						<ee:transform doc:name="Transform Message" doc:id="993bad93-ff0b-4d43-b40c-d7a05a9f0b91">
+							<ee:message>
+								<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload ++ {created_at: now()}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<os:store doc:name="Store_token_info" doc:id="4f2e3d2c-d281-4213-9416-7370b9ab0452" key="token" objectStore="Object_store"/>
+						<ee:transform doc:name="Transform Message" doc:id="77ddc30b-6fe9-4612-af31-3e2790e0eceb">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"token": payload.token,
+	"expiry_time": payload.expiry_intervals
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+					</otherwise>
+				</choice>
+			</when>
+			<otherwise >
+				<http:request method="GET" doc:name="Request" doc:id="9ce32f80-85cd-492e-ab04-78dcceb6fbea" config-ref="HTTP_Request_configuration" path="/externalapi"/>
+				<ee:transform doc:name="Transform Message" doc:id="b01b92b6-40b3-42f5-a46a-7f2dbcce885c" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload ++ {created_at: now()}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<os:store doc:name="Store_token_info" doc:id="0a0a4935-e528-4f85-bb9e-66135333107d" key="token" objectStore="Object_store"/>
+				<ee:transform doc:name="Transform Message" doc:id="292dca8b-4947-4f7e-9212-ebd12539acaf" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"token": payload.token,
+	"expiry_time": payload.expiry_intervals
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</flow>
+</mule>
